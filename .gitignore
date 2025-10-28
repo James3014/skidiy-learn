@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# build artifacts
+.next/
+**/.next/
+out/
+
+# local files
+.DS_Store
+.env*
+logs/
+coverage/

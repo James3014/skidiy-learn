@@ -1,0 +1,918 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "AppController_healthCheck",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/api/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/abilities": {
+      "get": {
+        "operationId": "AbilityController_getAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Ability"
+        ]
+      }
+    },
+    "/api/analysis-groups": {
+      "get": {
+        "operationId": "AnalysisController_getAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analysis"
+        ]
+      }
+    },
+    "/api/practice-skills": {
+      "get": {
+        "operationId": "PracticeController_getSkills",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Practice"
+        ]
+      }
+    },
+    "/api/api/v1/lessons": {
+      "get": {
+        "operationId": "LessonsController_findAll",
+        "parameters": [
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "coach",
+                "student"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lesson date (ISO format)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instructorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resortId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List lessons with optional filters",
+        "tags": [
+          "lessons"
+        ]
+      },
+      "post": {
+        "operationId": "LessonsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLessonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a new lesson with seats",
+        "tags": [
+          "lessons"
+        ]
+      }
+    },
+    "/api/api/v1/lessons/{id}": {
+      "get": {
+        "operationId": "LessonsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Lesson ID",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get lesson details by ID",
+        "tags": [
+          "lessons"
+        ]
+      }
+    },
+    "/api/api/v1/lessons/{id}/seats": {
+      "get": {
+        "operationId": "LessonsController_getSeats",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Lesson ID",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "include",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated includes (e.g. \"self_eval\")",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get seats for a lesson with status and optional self-evaluation",
+        "tags": [
+          "lessons"
+        ]
+      }
+    },
+    "/api/api/v1/seats/{id}": {
+      "get": {
+        "operationId": "SeatsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Seats"
+        ]
+      }
+    },
+    "/api/api/v1/seats/{id}/invitations": {
+      "post": {
+        "operationId": "SeatsController_generateInvitation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvitationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Seats"
+        ]
+      }
+    },
+    "/api/api/v1/seats/{id}/identity-form": {
+      "get": {
+        "operationId": "SeatsController_getIdentityForm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Seats"
+        ]
+      },
+      "put": {
+        "operationId": "SeatsController_updateIdentityForm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Seats"
+        ]
+      }
+    },
+    "/api/api/v1/invitations/{code}": {
+      "get": {
+        "operationId": "InvitationsController_verifyCode",
+        "parameters": [
+          {
+            "name": "code",
+            "required": true,
+            "in": "path",
+            "description": "8-character invitation code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Verify invitation code validity",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/api/v1/invitations/claim": {
+      "post": {
+        "operationId": "InvitationsController_claimSeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimInvitationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Claim a seat using invitation code and student information",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/api/v1/invitations/{code}/identity": {
+      "post": {
+        "operationId": "InvitationsController_submitIdentityForm",
+        "parameters": [
+          {
+            "name": "code",
+            "required": true,
+            "in": "path",
+            "description": "8-character invitation code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Submit or update identity form before claiming seat",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/api/v1/students/{mappingId}/lessons/{lessonId}/self-eval": {
+      "post": {
+        "operationId": "StudentsController_submitSelfEvaluation",
+        "parameters": [
+          {
+            "name": "mappingId",
+            "required": true,
+            "in": "path",
+            "description": "Student mapping ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lessonId",
+            "required": true,
+            "in": "path",
+            "description": "Lesson ID",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSelfEvaluationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Submit or update student self-evaluation for a lesson",
+        "tags": [
+          "students"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/private": {
+      "get": {
+        "operationId": "LessonRecordController_listPrivate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "List private lesson records for authenticated instructor",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/shared": {
+      "get": {
+        "operationId": "LessonRecordController_listShared",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "List shared lesson records accessible to instructor",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records": {
+      "post": {
+        "operationId": "LessonRecordController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLessonRecordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Create a new lesson record with analyses and practices",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/{detailId}/analyses/reorder": {
+      "post": {
+        "operationId": "LessonRecordController_reorderAnalyses",
+        "parameters": [
+          {
+            "name": "detailId",
+            "required": true,
+            "in": "path",
+            "description": "Lesson record detail ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Reorder analysis items for a lesson detail",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/{detailId}/practices/reorder": {
+      "post": {
+        "operationId": "LessonRecordController_reorderPractices",
+        "parameters": [
+          {
+            "name": "detailId",
+            "required": true,
+            "in": "path",
+            "description": "Lesson record detail ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Reorder practice items for a lesson detail",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/ratings": {
+      "post": {
+        "operationId": "LessonRecordController_createRatings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCoachRatingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Create coach ability ratings for students",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/api/v1/lesson-records/students/{mappingId}/latest-ratings": {
+      "get": {
+        "operationId": "LessonRecordController_getLatestRatings",
+        "parameters": [
+          {
+            "name": "mappingId",
+            "required": true,
+            "in": "path",
+            "description": "Student mapping ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Get latest ability ratings for a student",
+        "tags": [
+          "lesson-records"
+        ]
+      }
+    },
+    "/api/identity/seats/{seatId}/invitation": {
+      "post": {
+        "operationId": "IdentityController_generateInvitation",
+        "parameters": [
+          {
+            "name": "seatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Identity"
+        ]
+      }
+    },
+    "/api/identity/seats/{seatId}/form": {
+      "get": {
+        "operationId": "IdentityController_getIdentity",
+        "parameters": [
+          {
+            "name": "seatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Identity"
+        ]
+      },
+      "patch": {
+        "operationId": "IdentityController_submitIdentity",
+        "parameters": [
+          {
+            "name": "seatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Identity"
+        ]
+      }
+    },
+    "/api/identity/seats/{seatId}/confirm": {
+      "post": {
+        "operationId": "IdentityController_confirmSeat",
+        "parameters": [
+          {
+            "name": "seatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Identity"
+        ]
+      }
+    },
+    "/api/api/v1/sharing/details/{detailId}/visibility": {
+      "patch": {
+        "operationId": "SharingController_updateVisibility",
+        "parameters": [
+          {
+            "name": "detailId",
+            "required": true,
+            "in": "path",
+            "description": "Lesson record detail ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Update share visibility for a lesson record detail",
+        "tags": [
+          "sharing"
+        ]
+      }
+    },
+    "/api/api/v1/sharing/records": {
+      "get": {
+        "operationId": "SharingController_querySharedRecords",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of results (default: 20)",
+            "schema": {}
+          },
+          {
+            "name": "sportType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by sport type",
+            "schema": {
+              "enum": [
+                "ski",
+                "snowboard"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "resortId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by resort ID",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT-auth": []
+          }
+        ],
+        "summary": "Query shared teaching records with filters",
+        "tags": [
+          "sharing"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "DIY Ski Evaluation API",
+    "description": "Ski instructor teaching evaluation and record management system",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "lessons",
+      "description": "Lesson management endpoints"
+    },
+    {
+      "name": "invitations",
+      "description": "Seat invitation and claiming"
+    },
+    {
+      "name": "lesson-records",
+      "description": "Teaching records and evaluations"
+    },
+    {
+      "name": "sharing",
+      "description": "Record sharing and visibility"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "JWT-auth": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "name": "JWT",
+        "description": "Enter JWT token",
+        "in": "header"
+      }
+    },
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateLessonDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateInvitationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ClaimInvitationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateSelfEvaluationDto": {
+        "type": "object",
+        "properties": {
+          "selfRating": {
+            "type": "number",
+            "description": "Self-evaluation rating (1-5)",
+            "minimum": 1,
+            "maximum": 5,
+            "example": 3
+          },
+          "selfComment": {
+            "type": "string",
+            "description": "Optional comment for self-evaluation",
+            "example": "I have some experience with skiing but need more practice on turns"
+          }
+        },
+        "required": [
+          "selfRating"
+        ]
+      },
+      "CreateLessonRecordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ReorderItemsDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateCoachRatingsDto": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

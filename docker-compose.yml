@@ -1,0 +1,79 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-diyski}
+      POSTGRES_USER: ${POSTGRES_USER:-diyski}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-diyski}
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./infrastructure/keycloak/realms:/opt/keycloak/data/import
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - '8025:8025'
+      - '1025:1025'
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace/apps/api
+    command: pnpm start:dev
+    environment:
+      DATABASE_URL: postgresql://diyski:diyski@postgres:5432/diyski
+      NODE_ENV: development
+      PORT: 3000
+    ports:
+      - '3001:3000'
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+      - /workspace/apps/api/node_modules
+    depends_on:
+      - postgres
+      - redis
+
+  prisma-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.prisma
+    working_dir: /workspace
+    environment:
+      DATABASE_URL: postgresql://diyski:diyski@diyski-postgres-1:5432/diyski
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+    networks:
+      - diyski_default
+
+volumes:
+  pgdata:
+
+networks:
+  diyski_default:
+    external: true

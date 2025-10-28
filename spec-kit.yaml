@@ -1,0 +1,31 @@
+version: 1
+
+sources:
+  data_model:
+    path: spec/erm.dbml
+    format: dbml
+  features:
+    path: spec/features
+    format: gherkin
+    include: "*.feature"
+  spec_markdown:
+    path: sdd-T-spec_20251002.md
+    format: markdown
+
+outputs:
+  docs:
+    path: docs/spec-kit
+    format: markdown
+
+commands:
+  generate-docs:
+    description: 產出最新的規格文件摘要
+    steps:
+      - run: spec-kit export --spec spec/erm.dbml --out docs/spec-kit/data-model.md
+      - run: spec-kit export --spec spec/features --out docs/spec-kit/features.md
+      - run: bash scripts/export-spec-markdown.sh
+  lint:
+    description: 檢查 DBML 與 Feature 檔一致性
+    steps:
+      - run: spec-kit lint spec/erm.dbml
+      - run: spec-kit lint spec/features

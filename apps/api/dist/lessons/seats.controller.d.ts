@@ -1,0 +1,61 @@
+import { SeatsService } from './seats.service.js';
+import { InvitationsService } from './invitations.service.js';
+import { SeatResponseDto } from './dto/seat-response.dto.js';
+import { CreateInvitationDto } from './dto/create-invitation.dto.js';
+import { InvitationResponseDto } from './dto/invitation-response.dto.js';
+export declare class SeatsController {
+    private readonly seatsService;
+    private readonly invitationsService;
+    constructor(seatsService: SeatsService, invitationsService: InvitationsService);
+    findOne(id: string): Promise<SeatResponseDto>;
+    generateInvitation(id: string, dto?: CreateInvitationDto): Promise<InvitationResponseDto>;
+    getIdentityForm(id: string): Promise<{
+        id: string;
+        seatId: string;
+        status: import("@prisma/client").$Enums.SeatIdentityStatus;
+        studentName: string | null;
+        studentEnglish: string | null;
+        birthDate: Date | null;
+        contactEmail: string | null;
+        guardianEmail: string | null;
+        contactPhone: string | null;
+        isMinor: boolean;
+        hasExternalInsurance: boolean;
+        insuranceProvider: string | null;
+        note: string | null;
+        submittedAt: Date | null;
+        confirmedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    updateIdentityForm(id: string, data: {
+        studentName?: string;
+        studentEnglish?: string;
+        birthDate?: string;
+        contactEmail?: string;
+        guardianEmail?: string;
+        contactPhone?: string;
+        isMinor?: boolean;
+        hasExternalInsurance?: boolean;
+        insuranceProvider?: string;
+        note?: string;
+    }): Promise<{
+        id: string;
+        seatId: string;
+        status: import("@prisma/client").$Enums.SeatIdentityStatus;
+        studentName: string | null;
+        studentEnglish: string | null;
+        birthDate: Date | null;
+        contactEmail: string | null;
+        guardianEmail: string | null;
+        contactPhone: string | null;
+        isMinor: boolean;
+        hasExternalInsurance: boolean;
+        insuranceProvider: string | null;
+        note: string | null;
+        submittedAt: Date | null;
+        confirmedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+}

@@ -1,0 +1,375 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SportType {
+  snowboard
+  ski
+}
+
+enum RecordShareVisibility {
+  private
+  resort
+  all
+}
+
+enum StudentPersona {
+  doer
+  thinker
+  watcher
+}
+
+enum GuardianType {
+  parent
+  guardian
+  relative
+}
+
+enum SeatIdentityStatus {
+  draft
+  submitted
+  confirmed
+}
+
+enum SeatStatus {
+  pending
+  invited
+  claimed
+  completed
+  expired
+}
+
+enum CoachProficiencyBand {
+  knew
+  familiar
+  excellent
+}
+
+model Account {
+  id          String   @id @default(uuid())
+  role        String
+  status      String
+  mfaEnabled  Boolean  @default(false)
+  instructors Instructor[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  auditLogs   AuditLog[] @relation("AuditActor")
+  sharedRecords LessonRecordDetail[] @relation("SharedByAccount")
+  coachRatings  CoachAbilityRating[]
+}
+
+model Instructor {
+  id                     String      @id @default(uuid())
+  accountId              String
+  canViewSharedRecords   Boolean     @default(false)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+  account                Account     @relation(fields: [accountId], references: [id])
+  lessons                Lesson[]
+}
+
+model Resort {
+  id        Int       @id @default(autoincrement())
+  name      String
+  location  String?
+  lessons   Lesson[]
+  mappings  StudentMapping[]
+  records   LessonRecordDetail[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Lesson {
+  id            Int       @id @default(autoincrement())
+  resortId      Int
+  instructorId  String
+  lessonDate    DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  resort        Resort   @relation(fields: [resortId], references: [id])
+  instructor    Instructor @relation(fields: [instructorId], references: [id])
+  seats         OrderSeat[]
+  record        LessonRecord?
+  selfEvaluations StudentSelfEvaluation[]
+}
+
+model GlobalStudent {
+  id        String            @id @default(uuid())
+  email     String?
+  phone     String?
+  birthDate DateTime?
+  createdAt DateTime          @default(now())
+  mappings  StudentMapping[]
+  guardians GuardianRelationship[]
+}
+
+model StudentMapping {
+  id              String         @id @default(uuid())
+  globalStudentId String
+  resortId        Int
+  createdAt       DateTime       @default(now())
+  globalStudent   GlobalStudent  @relation(fields: [globalStudentId], references: [id])
+  resort          Resort         @relation(fields: [resortId], references: [id])
+  seats           OrderSeat[]    @relation("SeatClaim")
+  recordDetails   LessonRecordDetail[]
+  selfEvaluations StudentSelfEvaluation[]
+  claimedInvitations SeatInvitation[] @relation("SeatInvitationClaimer")
+}
+
+model GuardianRelationship {
+  id             String       @id @default(uuid())
+  guardianEmail  String
+  studentId      String
+  relationship   GuardianType
+  createdAt      DateTime     @default(now())
+  student        GlobalStudent @relation(fields: [studentId], references: [id])
+}
+
+model OrderSeat {
+  id                String         @id @default(uuid())
+  lessonId          Int
+  seatNumber        Int
+  claimedMappingId  String?
+  status            SeatStatus     @default(pending)
+  claimedAt         DateTime?
+  version           Int            @default(1)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  lesson            Lesson         @relation(fields: [lessonId], references: [id])
+  claimedMapping    StudentMapping? @relation("SeatClaim", fields: [claimedMappingId], references: [id])
+  invitations       SeatInvitation[]
+  identityForm      SeatIdentityForm?
+}
+
+model SeatInvitation {
+  code       String    @id
+  seatId     String
+  expiresAt  DateTime
+  claimedAt  DateTime?
+  claimedBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  seat       OrderSeat @relation(fields: [seatId], references: [id])
+  claimer    StudentMapping? @relation("SeatInvitationClaimer", fields: [claimedBy], references: [id])
+  @@index([expiresAt])
+}
+
+model SeatIdentityForm {
+  id               String             @id @default(uuid())
+  seatId           String             @unique
+  status           SeatIdentityStatus @default(draft)
+  studentName      String?
+  studentEnglish   String?
+  birthDate        DateTime?
+  contactEmail     String?
+  guardianEmail    String?
+  contactPhone     String?
+  isMinor          Boolean            @default(false)
+  hasExternalInsurance Boolean        @default(false)
+  insuranceProvider String?
+  note             String?
+  submittedAt      DateTime?
+  confirmedAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  seat             OrderSeat          @relation(fields: [seatId], references: [id])
+}
+
+model LessonRecord {
+  id         String                @id @default(uuid())
+  lessonId   Int                   @unique
+  summary    String?
+  videos     Json?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  lesson     Lesson                @relation(fields: [lessonId], references: [id])
+  details    LessonRecordDetail[]
+}
+
+model LessonRecordDetail {
+  id                String                  @id @default(uuid())
+  lessonRecordId    String
+  studentMappingId  String
+  resortId          Int
+  shareVisibility   RecordShareVisibility   @default(private)
+  studentTypes      StudentPersona[]        @default([])
+  sharedAt          DateTime?
+  sharedBy          String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  lessonRecord      LessonRecord            @relation(fields: [lessonRecordId], references: [id])
+  studentMapping    StudentMapping          @relation(fields: [studentMappingId], references: [id])
+  resort            Resort                  @relation(fields: [resortId], references: [id])
+  sharedByAccount   Account?                @relation("SharedByAccount", fields: [sharedBy], references: [id])
+  analyses          LessonDetailAnalysis[]
+  practices         LessonDetailPractice[]
+  coachRatings      CoachAbilityRating[]
+  @@index([shareVisibility, resortId])
+  @@index([studentTypes])
+}
+
+model LessonDetailAnalysis {
+  id                      String   @id @default(uuid())
+  lessonRecordDetailId    String
+  analysisGroupId         Int?
+  analysisItemId          Int?
+  customAnalysis          String?
+  displayOrder            Int
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  detail                  LessonRecordDetail @relation(fields: [lessonRecordDetailId], references: [id])
+  analysisGroup           AnalysisGroup?     @relation(fields: [analysisGroupId], references: [id])
+  analysisItem            AnalysisItem?      @relation(fields: [analysisItemId], references: [id])
+  @@unique([lessonRecordDetailId, displayOrder])
+}
+
+model LessonDetailPractice {
+  id                      String       @id @default(uuid())
+  lessonRecordDetailId    String
+  skillId                 Int?
+  drillId                 Int?
+  customDrill             String?
+  practiceNotes           String?
+  displayOrder            Int
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  detail                  LessonRecordDetail @relation(fields: [lessonRecordDetailId], references: [id])
+  skill                   Skill?        @relation(fields: [skillId], references: [id])
+  drill                   PracticeDrill? @relation(fields: [drillId], references: [id])
+  @@unique([lessonRecordDetailId, displayOrder])
+}
+
+model AnalysisGroup {
+  id            Int            @id @default(autoincrement())
+  name          String
+  sportType     SportType
+  description   String?
+  displayOrder  Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  analyses      LessonDetailAnalysis[]
+  items         AnalysisItem[]
+  @@unique([name, sportType])
+}
+
+model AnalysisItem {
+  id            Int           @id
+  groupId       Int
+  name          String
+  nameEn        String?
+  description   String?
+  sportType     SportType
+  displayOrder  Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  group         AnalysisGroup @relation(fields: [groupId], references: [id])
+  analyses      LessonDetailAnalysis[]
+  @@index([groupId])
+}
+
+model Skill {
+  id           Int            @id
+  name         String
+  nameEn       String?
+  sportType    SportType
+  description  String?
+  displayOrder Int
+  drills       PracticeDrill[]
+  practices    LessonDetailPractice[]
+}
+
+model PracticeDrill {
+  id           Int       @id
+  skillId      Int?
+  name         String
+  nameEn       String?
+  description  String?
+  sportType    SportType
+  displayOrder Int
+  skill        Skill?    @relation(fields: [skillId], references: [id])
+  practices    LessonDetailPractice[]
+}
+
+model AbilityCatalog {
+  id                Int      @id
+  name              String
+  category          String
+  sportType         SportType
+  skillLevel        Int
+  sequenceInLevel   Int
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  coachRatings      CoachAbilityRating[]
+  @@index([sportType, skillLevel, sequenceInLevel])
+}
+
+model CoachAbilityRating {
+  id                    String              @id @default(uuid())
+  lessonRecordDetailId  String
+  abilityId             Int
+  rating                Int
+  proficiencyBand       CoachProficiencyBand
+  comment               String?
+  sourceRatingId        String?
+  ratedBy               String
+  ratedAt               DateTime @default(now())
+  version               Int      @default(1)
+  detail                LessonRecordDetail @relation(fields: [lessonRecordDetailId], references: [id])
+  ability               AbilityCatalog     @relation(fields: [abilityId], references: [id])
+  sourceRating          CoachAbilityRating? @relation("RatingInheritance", fields: [sourceRatingId], references: [id])
+  inheritedBy           CoachAbilityRating[] @relation("RatingInheritance")
+  ratedByAccount        Account             @relation(fields: [ratedBy], references: [id])
+  @@index([lessonRecordDetailId, abilityId])
+  @@index([sourceRatingId])
+}
+
+model StudentSelfEvaluation {
+  id               String   @id @default(uuid())
+  studentMappingId String
+  lessonId         Int
+  selfRating       Int
+  selfComment      String?
+  updatedAt        DateTime @default(now())
+  mapping          StudentMapping @relation(fields: [studentMappingId], references: [id])
+  lesson           Lesson         @relation(fields: [lessonId], references: [id])
+  @@unique([studentMappingId, lessonId])
+}
+
+model LegacyIdMapping {
+  id          String   @id @default(uuid())
+  legacyType  String
+  legacyId    String
+  newEntityId String
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  scope      String?
+  filters    Json?
+  count      Int?
+  reason     String?
+  performedAt DateTime @default(now())
+  actor      Account? @relation("AuditActor", fields: [actorId], references: [id])
+}
+
+model JobRun {
+  id             String   @id @default(uuid())
+  jobName        String
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  status         String
+  processedCount Int?
+  errorMessage   String?
+}

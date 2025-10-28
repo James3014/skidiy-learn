@@ -1,0 +1,336 @@
+Project "Ski Teaching Evaluation Platform" {
+  database_type: "PostgreSQL"
+}
+
+Enum record_share_visibility_enum {
+  private
+  resort
+  all
+}
+
+Enum student_persona_enum {
+  doer
+  thinker
+  watcher
+}
+
+Enum sport_type_enum {
+  snowboard
+  ski
+}
+
+Enum guardian_type_enum {
+  parent
+  guardian
+  relative
+}
+
+Enum seat_identity_status_enum {
+  draft
+  submitted
+  confirmed
+}
+
+Enum seat_status_enum {
+  pending
+  invited
+  claimed
+  completed
+  expired
+}
+
+Enum coach_proficiency_band_enum {
+  knew
+  familiar
+  excellent
+}
+
+Table accounts {
+  id string [pk, note: '帳號唯一識別；供教練評量與共享審計引用']
+  role string [note: '帳號角色，對應系統角色設定']
+  status string [note: '帳號狀態；規格未定義值域']
+  mfa_enabled bool [note: '是否啟用多因素驗證，敏感操作需通過 MFA']
+  Note: '登入帳號與安全設定主檔，供 instructors 與共享審計使用'
+}
+
+Table instructors {
+  id string [pk, note: '教練識別；供課程與評量引用']
+  account_id string [note: '對應 accounts.id，建立教練登入關聯']
+  can_view_shared_records bool [default: false, note: '共享紀錄閱讀權限旗標，預設 false']
+  Note: '教練資料主檔，掌管課程及共享權限設定；授課雪場由 lessons.resort_id 決定'
+}
+
+Table resorts {
+  id int [pk, note: '雪場識別碼']
+  name string [note: '雪場名稱']
+  location string [note: '雪場所在地，規格未定義格式']
+  Note: '雪場字典資料，供課程與共享查詢引用'
+}
+
+Table lessons {
+  id int [pk, note: '課程識別；供席位與評量引用']
+  resort_id int [note: '授課雪場，對應 resorts.id']
+  instructor_id string [note: '授課教練，對應 instructors.id']
+  date date [note: '課程日期']
+  Note: '課程主檔，串聯雪場、教練與每日課程安排'
+}
+
+Table order_seats {
+  id string [pk, note: '席位識別（UUID）']
+  lesson_id int [note: '所屬課程，對應 lessons.id']
+  seat_number int [note: '課程內席位順序，限制 1~6']
+  claimed_mapping_id string [note: '已認領的學生映射，對應 student_mappings.id，可為空']
+  status seat_status_enum [default: 'pending', note: '席位狀態（pending/invited/claimed/completed/expired）']
+  claimed_at timestamptz [note: '席位被認領時間']
+  version int [note: '樂觀鎖版本號，每次更新遞增']
+  created_at timestamptz [note: '席位建立時間']
+  Note: '課程席位資料，串聯邀請碼與身份表單流程'
+}
+
+Table seat_invitations {
+  code string [pk, note: '席位邀請碼，預設 8 碼字串']
+  seat_id string [note: '對應 order_seats.id']
+  expires_at timestamptz [note: '邀請碼到期時間']
+  claimed_at timestamptz [note: '完成認領時間，未認領時為空']
+  claimed_by string [note: '完成認領的 student_mappings.id，未認領時為空']
+  Note: '席位邀請碼主檔，支援重寄與逾期回收'
+}
+
+Table global_students {
+  id string [pk, note: '學生全域 UUID']
+  email string [note: '學生 Email，供識別與通知']
+  phone string [note: '學生聯絡電話']
+  birth_date date [note: '學生生日']
+  created_at timestamptz [note: '建立時間']
+  Note: '跨雪場共用的學生身份主檔'
+}
+
+Table student_mappings {
+  id string [pk, note: '學生映射識別（UUID）']
+  global_student_id string [note: '對應 global_students.id']
+  resort_id int [note: '對應 resorts.id，表明學生於雪場的身份']
+  Note: '學生與雪場的映射資料，支援跨雪場身份管理'
+}
+
+Table guardian_relationships {
+  id string [pk, note: '關係識別（UUID）']
+  guardian_email string [note: '監護人 Email']
+  student_id string [note: '對應 global_students.id']
+  relationship_type guardian_type_enum [note: '關係型別（parent/guardian/relative）']
+  created_at timestamptz [note: '建立時間']
+  Note: '監護人與學生的關係紀錄，避免姓名比對'
+}
+
+Table seat_identity_forms {
+  id string [pk, note: '身份表單識別（UUID）']
+  seat_id string [note: '對應 order_seats.id']
+  status seat_identity_status_enum [default: 'draft', note: '表單狀態（draft/submitted/confirmed）']
+  student_display_name string [note: '學生中文姓名']
+  student_english_name string [note: '學生英文姓名']
+  birth_date date [note: '學生生日']
+  contact_email string [note: '學生聯絡 Email']
+  guardian_email string [note: '監護人 Email；當 is_minor = true 時必填']
+  contact_phone string [note: '聯絡電話']
+  is_minor bool [note: '是否由訂課系統標記為未成年成員']
+  has_external_insurance bool [note: '是否有外部保險']
+  insurance_provider string [note: '外部保險提供者名稱']
+  note string [note: '補充備註']
+  submitted_at timestamptz [note: '提交時間']
+  confirmed_at timestamptz [note: '確認時間']
+  created_at timestamptz [note: '建立時間']
+  updated_at timestamptz [note: '最後更新時間']
+  Note: '席位認領前的身份資料表單，每席位唯一'
+}
+
+Table lesson_records {
+  id string [pk, note: '教學紀錄識別（UUID）']
+  lesson_id int [note: '對應 lessons.id']
+  summary string [note: '課程摘要內容']
+  videos string [note: '教學影片資訊（簽名 URL 集合或 JSON 字串）']
+  created_at timestamptz [note: '建立時間']
+  updated_at timestamptz [note: '最後更新時間']
+  Note: '教練對單堂課程的整體教學記錄主檔'
+}
+
+Table lesson_record_details {
+  id string [pk, note: '教學紀錄學生明細識別（UUID）']
+  lesson_record_id string [note: '對應 lesson_records.id']
+  student_mapping_id string [note: '對應 student_mappings.id']
+  resort_id int [note: '課程所在雪場，冗餘以支援共享查詢']
+  share_visibility record_share_visibility_enum [default: 'private', note: '共享狀態（private/resort/all）']
+  student_types student_persona_enum[] [default: '{}', note: '學生類型陣列（doer/thinker/watcher）；建議使用 student_persona_enum[]']
+  shared_at timestamptz [note: '設定共享時間']
+  shared_by string [note: '執行共享的 accounts.id']
+  created_at timestamptz [note: '建立時間']
+  updated_at timestamptz [note: '最後更新時間']
+  Note: '單位學生的教學紀錄明細，可設定共享狀態與學生類型'
+}
+
+Table lesson_detail_analyses {
+  id string [pk, note: '分析項目識別（UUID）']
+  lesson_record_detail_id string [note: '對應 lesson_record_details.id']
+  analysis_group_id int [note: '對應 analysis_groups.id，可空']
+  analysis_id int [note: '對應 analysis_items.id，可空']
+  custom_analysis string [note: '自定義分析描述，analysis_id 空時必填']
+  display_order int [note: '顯示排序，由 Service 層給定 1..n']
+  created_at string [note: '建立時間（ISO 字串）']
+  updated_at string [note: '最後更新時間（ISO 字串）']
+  Note: '教學問題分析項目，排序由後端維護，支援字典與自訂'
+}
+
+Table lesson_detail_practices {
+  id string [pk, note: '練習項目識別（UUID）']
+  lesson_record_detail_id string [note: '對應 lesson_record_details.id']
+  skill_id int [note: '對應 skills.id，可空']
+  drill_id int [note: '對應 practice_drills.id，可空']
+  custom_drill string [note: '自定義練習描述，drill_id 空時必填']
+  practice_notes string [note: '額外練習備註']
+  display_order int [note: '顯示排序，由 Service 層給定 1..n']
+  created_at string [note: '建立時間（ISO 字串）']
+  updated_at string [note: '最後更新時間（ISO 字串）']
+  Note: '教學練習安排，支援字典與自訂項目'
+}
+
+Table analysis_groups {
+  id int [pk, note: '分析群組識別；對應 CSV category']
+  name string [note: '分析群組名稱（中文）']
+  name_en string [note: '分析群組英文名稱']
+  sport_type sport_type_enum [note: '運動別（snowboard/ski）']
+  description string [note: '群組描述，可為空字串']
+  display_order int [note: '顯示排序，對應 CSV idx']
+  Note: '分析群組字典，提供分析項目分節與排序'
+}
+
+Table analysis_items {
+  id int [pk, note: '分析項目識別；對應 CSV idx']
+  group_id int [note: '對應 analysis_groups.id']
+  name string [note: '分析項目名稱（中文）']
+  name_en string [note: '分析項目英文名稱']
+  description string [note: '項目說明，可為空字串']
+  sport_type sport_type_enum [note: '運動別（snowboard/ski）']
+  display_order int [note: '顯示排序，對應 CSV number']
+  Note: '分析項目字典，供教學紀錄分析明細選擇'
+}
+
+Table skills {
+  id int [pk, note: '技能識別；對應 CSV tacticIdxs']
+  name string [note: '技能名稱（中文）']
+  name_en string [note: '技能英文名稱']
+  sport_type sport_type_enum [note: '運動別（snowboard/ski）']
+  description string [note: '技能描述，可為空字串']
+  display_order int [note: '顯示排序，對應 CSV idx']
+  Note: '技能字典，供練習明細參照'
+}
+
+Table practice_drills {
+  id int [pk, note: '練習項目識別；對應 CSV tacticIdxs 細項']
+  skill_id int [note: '對應 skills.id，可為空（通用練習）']
+  name string [note: '練習項目名稱（中文）']
+  name_en string [note: '練習項目英文名稱']
+  description string [note: '練習項目描述，可為空字串']
+  sport_type sport_type_enum [note: '運動別（snowboard/ski）']
+  display_order int [note: '顯示排序，對應 CSV 順序']
+  Note: '練習項目字典，供練習明細使用'
+}
+
+Table ability_catalog {
+  id int [pk, note: '能力項目識別；對應 CSV idx']
+  name string [note: '能力項目名稱']
+  category string [note: '能力分類，規格未定義值域']
+  sport_type sport_type_enum [note: '運動別（snowboard/ski）']
+  skill_level int [note: '技能等級，範圍 1~6']
+  sequence_in_level int [note: '層內排序序號來自 CSV number']
+  description string [note: '能力項目說明，可為空字串']
+  created_at timestamptz [note: '建立時間']
+  updated_at timestamptz [note: '最後更新時間']
+  Note: '雙運動 179 項能力矩陣，支援能力清單查詢與匯入'
+}
+
+Table coach_ability_ratings {
+  id string [pk, note: '教練評量識別（UUID）']
+  lesson_record_detail_id string [note: '對應 lesson_record_details.id']
+  ability_id int [note: '對應 ability_catalog.id']
+  rating int [note: '1~3 星評量']
+  proficiency_band coach_proficiency_band_enum [note: '值域：knew/familiar/excellent，對應 rating 映射']
+  comment string [note: '教練評語']
+  source_rating_id string [note: '來源評量 ID，僅允許單層引用，可空']
+  rated_by string [note: '評量者 accounts.id']
+  rated_at timestamptz [note: '評量時間']
+  version int [note: '評量版本號，用於樂觀鎖']
+  Note: '教練能力評量明細，支援繼承與語系同步'
+}
+
+Table student_self_evaluations {
+  id string [pk, note: '學生自評識別（UUID）']
+  student_mapping_id string [note: '對應 student_mappings.id']
+  lesson_id int [note: '對應 lessons.id']
+  self_rating int [note: '學生自評星等 1~3']
+  self_comment string [note: '學生自評文字，可為空']
+  updated_at timestamptz [note: '最後更新時間；保留最新版本']
+  Note: '學生可多次自評，但同堂課僅保留最新一筆資料供教練查看；建議建立 UNIQUE (student_mapping_id, lesson_id)'
+}
+
+Table legacy_id_mappings {
+  id string [pk, note: '對照識別（UUID）']
+  legacy_type string [note: '舊系統類型（student_idx/lesson_idx/ability_idx）']
+  legacy_id string [note: '舊系統識別值']
+  new_entity_id string [note: '對應新系統實體 ID']
+  Note: '舊系統與新系統 ID 對照表，支援遷移追蹤'
+}
+
+Table audit_logs {
+  id string [pk, note: '審計紀錄識別（UUID）']
+  actor_id string [note: '操作人帳號，對應 accounts.id']
+  action string [note: '操作類型，例如 seat_identity_update、lesson_lookup']
+  entity_type string [note: '被操作資源類型，例如 lesson_record、seat_identity_form']
+  entity_id string [note: '被操作資源識別，視情境可為空']
+  scope string [note: '可選，記錄 scope=private/shared 等上下文']
+  filters jsonb [note: '查詢條件（JSON 結構），便於後續分析']
+  count int [note: '操作影響筆數，例如共享查詢返回筆數']
+  reason string [note: '操作者提供的理由或備註']
+  performed_at timestamptz [note: '操作發生時間']
+  Note: '記錄所有關鍵操作與查詢，用於稽核與風險監控'
+}
+
+Table job_runs {
+  id string [pk, note: '排程執行識別（UUID）']
+  job_name string [note: '排程名稱，例如 expire_invitations']
+  started_at timestamptz [note: '開始時間']
+  finished_at timestamptz [note: '結束時間']
+  status string [note: '執行狀態（success/failed/partial）']
+  processed_count int [note: '處理筆數統計']
+  error_message string [note: '錯誤訊息摘要，成功時為空']
+  Note: '排程監控資料，支援邀請碼逾期清理等批次作業追蹤'
+}
+
+Ref: instructors.account_id > accounts.id
+Ref: lessons.instructor_id > instructors.id
+Ref: lessons.resort_id > resorts.id
+Ref: order_seats.lesson_id > lessons.id
+Ref: order_seats.claimed_mapping_id > student_mappings.id
+Ref: seat_invitations.seat_id > order_seats.id
+Ref: seat_invitations.claimed_by > student_mappings.id
+Ref: seat_identity_forms.seat_id > order_seats.id
+Ref: student_mappings.global_student_id > global_students.id
+Ref: student_mappings.resort_id > resorts.id
+Ref: guardian_relationships.student_id > global_students.id
+Ref: lesson_records.lesson_id > lessons.id
+Ref: lesson_record_details.lesson_record_id > lesson_records.id
+Ref: lesson_record_details.student_mapping_id > student_mappings.id
+Ref: lesson_record_details.resort_id > resorts.id
+Ref: lesson_record_details.shared_by > accounts.id
+Ref: lesson_detail_analyses.lesson_record_detail_id > lesson_record_details.id
+Ref: lesson_detail_analyses.analysis_group_id > analysis_groups.id
+Ref: lesson_detail_analyses.analysis_id > analysis_items.id
+Ref: lesson_detail_practices.lesson_record_detail_id > lesson_record_details.id
+Ref: lesson_detail_practices.skill_id > skills.id
+Ref: lesson_detail_practices.drill_id > practice_drills.id
+Ref: analysis_items.group_id > analysis_groups.id
+Ref: practice_drills.skill_id > skills.id
+Ref: coach_ability_ratings.lesson_record_detail_id > lesson_record_details.id
+Ref: coach_ability_ratings.ability_id > ability_catalog.id
+Ref: coach_ability_ratings.source_rating_id > coach_ability_ratings.id
+Ref: coach_ability_ratings.rated_by > accounts.id
+Ref: student_self_evaluations.student_mapping_id > student_mappings.id
+Ref: student_self_evaluations.lesson_id > lessons.id
+Ref: audit_logs.actor_id > accounts.id
