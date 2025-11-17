@@ -21,6 +21,13 @@ export class AuthService {
    * In production, this would verify credentials against Keycloak/OIDC
    */
   async login(accountId: string): Promise<LoginResponse> {
+    // SECURITY: Disable dev login in production
+    if (process.env.NODE_ENV === 'production') {
+      throw new UnauthorizedException(
+        'Development login is disabled in production. Please use proper authentication.'
+      );
+    }
+
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
       select: { id: true, role: true, status: true }

@@ -67,22 +67,25 @@ model Account {
 model Instructor {
   id                     String      @id @default(uuid())
   accountId              String
+  resortId               Int?
   canViewSharedRecords   Boolean     @default(false)
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
   account                Account     @relation(fields: [accountId], references: [id])
+  resort                 Resort?     @relation(fields: [resortId], references: [id])
   lessons                Lesson[]
 }
 
 model Resort {
-  id        Int       @id @default(autoincrement())
-  name      String
-  location  String?
-  lessons   Lesson[]
-  mappings  StudentMapping[]
-  records   LessonRecordDetail[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          Int       @id @default(autoincrement())
+  name        String
+  location    String?
+  instructors Instructor[]
+  lessons     Lesson[]
+  mappings    StudentMapping[]
+  records     LessonRecordDetail[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Lesson {
