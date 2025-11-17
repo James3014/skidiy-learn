@@ -1,46 +1,28 @@
-# Build stage
-FROM node:22-slim AS builder
+# 最簡單的版本 - 不優化，只求能跑
+FROM node:22-slim
 
 RUN npm install -g pnpm@9
 
 WORKDIR /app
 
-# Copy workspace files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/api/package.json ./apps/api/
+# Copy 所有東西
+COPY . .
 
-# Install all dependencies
+# 安裝依賴
 RUN pnpm install --frozen-lockfile
 
-# Copy web source
-COPY apps/web ./apps/web
-
-# Build
+# 移到 web 目錄
 WORKDIR /app/apps/web
+
+# 構建
 RUN pnpm build
 
-# Production stage - FLAT structure, no workspace
-FROM node:22-slim AS runner
-
-WORKDIR /app
-
+# 環境變數
 ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
 ENV PORT=8080
-
-# Create user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Copy ONLY what's needed for next start - NO workspace structure
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
-
-USER nextjs
+ENV HOSTNAME=0.0.0.0
 
 EXPOSE 8080
 
-# Use node directly, not pnpm
-CMD ["node", "server.js"]
+# 直接用 next start
+CMD ["pnpm", "start"]
