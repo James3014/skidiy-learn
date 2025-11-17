@@ -1,39 +1,51 @@
 FROM node:22-slim AS base
 RUN npm install -g pnpm@9
 
+# Install dependencies only
 FROM base AS dependencies
-WORKDIR /src
+WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
+COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 
-FROM base AS build
-WORKDIR /src
+# Build the application
+FROM base AS builder
+WORKDIR /app
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
-COPY --from=dependencies /src/node_modules ./node_modules
-COPY --from=dependencies /src/apps/web/node_modules ./apps/web/node_modules
 
-# 構建 Web - 直接在 apps/web 目錄中執行
-WORKDIR /src/apps/web
-RUN pnpm build
+# Build Next.js app
+WORKDIR /app/apps/web
+RUN pnpm build && \
+    echo "=== Build completed, checking output ===" && \
+    ls -la .next/ && \
+    echo "=== Checking standalone directory ===" && \
+    ls -la .next/standalone/ || echo "standalone directory not found" && \
+    echo "=== Checking for server.js ===" && \
+    find .next/standalone -name "server.js" -type f || echo "server.js not found"
 
-FROM base AS runtime
+# Production image, copy all the files and run next
+FROM base AS runner
 WORKDIR /app
 
-# 複製 standalone 輸出
-# standalone 模式會生成包含所有依賴的自包含目錄
-COPY --from=build /src/apps/web/.next/standalone ./
-# 複製靜態文件
-COPY --from=build /src/apps/web/.next/static ./apps/web/.next/static
-# 複製 public 文件
-COPY --from=build /src/apps/web/public ./apps/web/public
-
 ENV NODE_ENV=production
-ENV PORT=8080
 ENV HOSTNAME=0.0.0.0
+ENV PORT=8080
+
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy the standalone output
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+
+# Copy public directory if it exists (optional)
+RUN mkdir -p ./apps/web/public
+
+USER nextjs
 
 EXPOSE 8080
 
-# Next.js standalone server 位置
-CMD ["node", "apps/web/server.js"]
+CMD ["sh", "-c", "echo '=== Runtime check ===' && ls -la && ls -la apps/web/ && echo '=== Starting server ===' && node apps/web/server.js"]
