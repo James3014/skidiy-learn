@@ -1,43 +1,41 @@
-FROM node:22-slim AS base
-RUN npm install -g pnpm@9
-RUN apt-get update -y && apt-get install -y openssl
+# 基於能工作的 Dockerfile.dev 結構，只修改生產環境需要的部分
+FROM node:22-slim
 
-FROM base AS dependencies
-WORKDIR /src
+# Install OpenSSL for Prisma（像 Dockerfile.dev 一樣）
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# 使用 corepack（像 Dockerfile.dev 一樣）
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# 使用相同的工作目錄結構
+WORKDIR /workspace
+
+# 複製 workspace 配置（像 Dockerfile.dev 一樣）
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
+COPY apps/api/prisma ./apps/api/prisma
+COPY packages/schema/package.json ./packages/schema/ 2>/dev/null || true
+
+# 安裝依賴
 RUN pnpm install --frozen-lockfile
 
-FROM base AS build
-WORKDIR /src
+# 複製源碼
 COPY . .
-COPY --from=dependencies /src/node_modules ./node_modules
-COPY --from=dependencies /src/apps/api/node_modules ./apps/api/node_modules
 
-# 生成 Prisma Client
-WORKDIR /src/apps/api
-RUN pnpm prisma:generate
+# 切換到 api 目錄（像 Dockerfile.dev 一樣）
+WORKDIR /workspace/apps/api
 
-# 構建 API
-WORKDIR /src
-RUN pnpm --filter apps/api build
+# Generate Prisma Client（像 Dockerfile.dev 一樣）
+RUN pnpm prisma generate
 
-FROM base AS runtime
-WORKDIR /src
+# 構建（生產環境特有）
+RUN pnpm build
 
-COPY --from=build /src/apps/api/dist ./apps/api/dist
-COPY --from=build /src/apps/api/node_modules ./apps/api/node_modules
-COPY --from=build /src/apps/api/package.json ./apps/api/
-COPY --from=build /src/apps/api/prisma ./apps/api/prisma
-COPY --from=build /src/node_modules ./node_modules
-COPY --from=build /src/package.json ./
-
+# 環境變數
 ENV NODE_ENV=production
 ENV PORT=8080
 
 EXPOSE 8080
 
-# 啟動前執行數據庫遷移
-WORKDIR /src/apps/api
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# 運行 migration 然後啟動（使用 pnpm）
+CMD ["sh", "-c", "pnpm prisma migrate deploy && pnpm start"]
