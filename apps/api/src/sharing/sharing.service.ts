@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RateLimiterService } from '../rate-limiter/rate-limiter.service.js';
 import { RATE_LIMITS, isRateLimitEnabled } from '../config/rate-limits.js';
+import { PAGINATION } from '../config/constants.js';
 import type { Prisma, RecordShareVisibility, SportType, StudentPersona } from '@prisma/client';
 
 export interface QuerySharedRecordsOptions {
@@ -140,7 +141,7 @@ export class SharingService {
         }
       },
       orderBy: { sharedAt: 'desc' },
-      take: options.limit ?? 20
+      take: options.limit ?? PAGINATION.DEFAULT_LIMIT
     });
 
     // 5. Map to response format

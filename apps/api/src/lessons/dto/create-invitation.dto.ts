@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsInt, Min } from 'class-validator';
+import { INVITATION } from '../config/constants.js';
 
 export class CreateInvitationDto {
   @IsString()
@@ -7,5 +8,5 @@ export class CreateInvitationDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  expiresInDays?: number = 7;
+  expiresInDays?: number = INVITATION.DEFAULT_EXPIRY_DAYS;
 }

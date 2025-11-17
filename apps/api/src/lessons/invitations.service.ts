@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import * as crypto from 'crypto';
 import type { ErrorResponse } from '../types/errors.js';
+import { INVITATION } from '../config/constants.js';
 
 @Injectable()
 export class InvitationsService {
@@ -27,7 +28,7 @@ export class InvitationsService {
    */
   async generateInvitation(
     seatId: string,
-    expiresInDays: number = 7
+    expiresInDays: number = INVITATION.DEFAULT_EXPIRY_DAYS
   ): Promise<InvitationResponseDto> {
     // 驗證 seat 存在
     const seat = await this.prisma.orderSeat.findUnique({
@@ -38,8 +39,8 @@ export class InvitationsService {
       throw new NotFoundException(`Seat with id ${seatId} not found`);
     }
 
-    // 產生邀請碼，最多重試 5 次
-    const maxRetries = 5;
+    // 產生邀請碼，最多重試次數
+    const maxRetries = INVITATION.MAX_RETRIES;
     let invitation: SeatInvitation | null = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -335,15 +336,14 @@ export class InvitationsService {
   }
 
   /**
-   * 產生 8 字元隨機碼
+   * 產生隨機邀請碼
    */
   private generateCode(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 排除易混淆字元 0O1I
     let code = '';
-    const bytes = crypto.randomBytes(8);
+    const bytes = crypto.randomBytes(INVITATION.CODE_LENGTH);
 
-    for (let i = 0; i < 8; i++) {
-      code += chars[bytes[i] % chars.length];
+    for (let i = 0; i < INVITATION.CODE_LENGTH; i++) {
+      code += INVITATION.CODE_CHARS[bytes[i] % INVITATION.CODE_CHARS.length];
     }
 
     return code;

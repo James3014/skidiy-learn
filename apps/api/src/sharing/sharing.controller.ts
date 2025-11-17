@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery } from '@nestj
 import { SharingService } from './sharing.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+import { PAGINATION } from '../config/constants.js';
 
 @ApiTags('sharing')
 @ApiBearerAuth('JWT-auth')
@@ -27,7 +28,7 @@ export class SharingController {
   @ApiOperation({ summary: 'Query shared teaching records with filters' })
   @ApiQuery({ name: 'resortId', required: false, description: 'Filter by resort ID' })
   @ApiQuery({ name: 'sportType', required: false, enum: ['ski', 'snowboard'], description: 'Filter by sport type' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Maximum number of results (default: 20)' })
+  @ApiQuery({ name: 'limit', required: false, description: `Maximum number of results (default: ${PAGINATION.DEFAULT_LIMIT})` })
   async querySharedRecords(
     @Query('resortId') resortId: string | undefined,
     @Query('sportType') sportType: string | undefined,
@@ -37,7 +38,7 @@ export class SharingController {
     return this.sharingService.querySharedRecords(accountId, {
       resortId: resortId ? parseInt(resortId) : undefined,
       sportType: sportType as 'ski' | 'snowboard' | undefined,
-      limit: limit ? parseInt(limit) : 20
+      limit: limit ? parseInt(limit) : PAGINATION.DEFAULT_LIMIT
     });
   }
 }
