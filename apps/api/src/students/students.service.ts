@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateSelfEvaluationDto } from './dto/create-self-evaluation.dto.js';
 
@@ -11,7 +11,7 @@ export class StudentsService {
     lessonId: number,
     dto: CreateSelfEvaluationDto
   ) {
-    // Validate that the mapping exists
+    // Validate mapping exists (lesson validation happens implicitly via foreign key)
     const mapping = await this.prisma.studentMapping.findUnique({
       where: { id: mappingId }
     });
@@ -20,21 +20,8 @@ export class StudentsService {
       throw new NotFoundException(`Student mapping ${mappingId} not found`);
     }
 
-    // Validate that the lesson exists
-    const lesson = await this.prisma.lesson.findUnique({
-      where: { id: lessonId }
-    });
-
-    if (!lesson) {
-      throw new NotFoundException(`Lesson ${lessonId} not found`);
-    }
-
-    // Validate rating range
-    if (dto.selfRating < 1 || dto.selfRating > 5) {
-      throw new BadRequestException('Self rating must be between 1 and 5');
-    }
-
-    // Upsert self-evaluation
+    // Note: Rating range validation is handled by DTO @Min/@Max decorators
+    // Upsert self-evaluation - foreign key constraint will validate lesson exists
     const selfEval = await this.prisma.studentSelfEvaluation.upsert({
       where: {
         studentMappingId_lessonId: {

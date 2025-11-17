@@ -4,15 +4,10 @@ import { AppModule } from './app.module.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-function resolveCorsOrigin(envValue: string | undefined): true | string[] {
+function resolveCorsOrigin(envValue?: string): true | string[] {
   if (!envValue) return true;
-
-  const origins = envValue
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-
-  return origins.length === 0 ? true : origins;
+  const origins = envValue.split(',').map(s => s.trim()).filter(Boolean);
+  return origins.length ? origins : true;
 }
 
 async function bootstrap() {

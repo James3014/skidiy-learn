@@ -58,9 +58,16 @@ export class LessonRecordService {
     const instructor = await this.prisma.instructor.findFirst({
       where: { accountId }
     });
-    if (!instructor || !instructor.canViewSharedRecords) {
+
+    if (!instructor) {
       return [];
     }
+
+    // If canViewSharedRecords is true, instructor can see all resorts' shared records
+    // Otherwise, only see records from their own resort
+    const resortFilter = instructor.canViewSharedRecords
+      ? undefined
+      : instructor.resortId;
 
     const details = await this.prisma.lessonRecordDetail.findMany({
       where: {
@@ -70,11 +77,7 @@ export class LessonRecordService {
         sharedBy: {
           not: null
         },
-        resortId: instructor.canViewSharedRecords
-          ? undefined
-          : await this.prisma.lesson
-              .findFirst({ where: { instructorId: instructor.id } })
-              .then((lesson) => lesson?.resortId ?? undefined)
+        resortId: resortFilter
       },
       include: {
         lessonRecord: {
@@ -109,9 +112,15 @@ export class LessonRecordService {
   }
 
   async createLessonRecord(dto: CreateLessonRecordDto): Promise<LessonRecordResponse> {
-    // Step 1: Validate lesson exists and has no record (outside transaction)
+    const lesson = await this.validateLessonForRecord(dto.lessonId);
+    const payload = this.buildRecordPayload(dto, lesson.resortId);
+    const record = await this.persistRecordWithAudit(payload);
+    return this.mapLessonRecord(record);
+  }
+
+  private async validateLessonForRecord(lessonId: number) {
     const lesson = await this.prisma.lesson.findUnique({
-      where: { id: dto.lessonId },
+      where: { id: lessonId },
       include: { record: true }
     });
 
@@ -123,46 +132,47 @@ export class LessonRecordService {
       throw new ConflictException('此課程已存在教學記錄');
     }
 
-    // Step 2: Create record with all details in a transaction
-    const payload: Prisma.LessonRecordCreateInput = {
+    return lesson;
+  }
+
+  private buildRecordPayload(
+    dto: CreateLessonRecordDto,
+    resortId: number
+  ): Prisma.LessonRecordCreateInput {
+    return {
       summary: dto.summary ?? null,
       videos: dto.videos ? (dto.videos as Prisma.InputJsonValue) : Prisma.JsonNull,
-      lesson: {
-        connect: { id: dto.lessonId }
-      },
+      lesson: { connect: { id: dto.lessonId } },
       details: {
         create: dto.details.map((detail) => ({
           studentMapping: { connect: { id: detail.studentMappingId } },
-          resort: { connect: { id: lesson.resortId } },
+          resort: { connect: { id: resortId } },
           shareVisibility: detail.shareVisibility ?? 'private',
           studentTypes: detail.studentTypes ?? [],
           analyses: detail.analyses
-            ? {
-                create: detail.analyses.map((analysis, order) => ({
-                  analysisGroupId: analysis.analysisGroupId,
-                  analysisItemId: analysis.analysisItemId,
-                  customAnalysis: analysis.customAnalysis ?? null,
-                  displayOrder: order
-                }))
-              }
+            ? { create: detail.analyses.map((analysis, order) => ({
+                analysisGroupId: analysis.analysisGroupId,
+                analysisItemId: analysis.analysisItemId,
+                customAnalysis: analysis.customAnalysis ?? null,
+                displayOrder: order
+              }))}
             : undefined,
           practices: detail.practices
-            ? {
-                create: detail.practices.map((practice, order) => ({
-                  skillId: practice.skillId,
-                  drillId: practice.drillId,
-                  customDrill: practice.customDrill ?? null,
-                  practiceNotes: practice.practiceNotes ?? null,
-                  displayOrder: order
-                }))
-              }
+            ? { create: detail.practices.map((practice, order) => ({
+                skillId: practice.skillId,
+                drillId: practice.drillId,
+                customDrill: practice.customDrill ?? null,
+                practiceNotes: practice.practiceNotes ?? null,
+                displayOrder: order
+              }))}
             : undefined
         }))
       }
     };
+  }
 
-    const record = await this.prisma.$transaction(async (tx) => {
-      // Create lesson record with nested details
+  private async persistRecordWithAudit(payload: Prisma.LessonRecordCreateInput) {
+    return this.prisma.$transaction(async (tx) => {
       const createdRecord = await tx.lessonRecord.create({
         data: payload,
         include: {
@@ -177,7 +187,6 @@ export class LessonRecordService {
         }
       });
 
-      // Log audit within transaction
       await tx.auditLog.create({
         data: {
           actorId: 'system',
@@ -192,8 +201,6 @@ export class LessonRecordService {
 
       return createdRecord;
     });
-
-    return this.mapLessonRecord(record);
   }
 
   async reorderAnalyses(detailId: string, payload: ReorderItemsDto): Promise<void> {
@@ -220,30 +227,31 @@ export class LessonRecordService {
 
     const updates = payload.items.map((item, index) => ({ id: item.id, order: item.displayOrder ?? index }));
 
-    if (type === 'analysis') {
-      await this.prisma.$transaction(
-        updates.map((item) =>
-          this.prisma.lessonDetailAnalysis.update({
-            where: { id: item.id },
-            data: { displayOrder: item.order, updatedAt: new Date() }
-          })
-        )
-      );
-    } else {
-      await this.prisma.$transaction(
-        updates.map((item) =>
-          this.prisma.lessonDetailPractice.update({
-            where: { id: item.id },
-            data: { displayOrder: item.order, updatedAt: new Date() }
-          })
-        )
-      );
-    }
+    // Use object mapping to eliminate if/else - Good Taste!
+    const modelMap = {
+      analysis: this.prisma.lessonDetailAnalysis,
+      practice: this.prisma.lessonDetailPractice
+    };
+
+    const entityTypeMap = {
+      analysis: 'lesson_detail_analysis',
+      practice: 'lesson_detail_practice'
+    };
+
+    const model = modelMap[type];
+    await this.prisma.$transaction(
+      updates.map((item) =>
+        model.update({
+          where: { id: item.id },
+          data: { displayOrder: item.order, updatedAt: new Date() }
+        })
+      )
+    );
 
     await this.audit.log({
       actorId: 'system',
       entityId: detail.lessonRecordId,
-      entityType: type === 'analysis' ? 'lesson_detail_analysis' : 'lesson_detail_practice',
+      entityType: entityTypeMap[type],
       action: 'reorder',
       reason: type,
       scope: 'private'
@@ -352,8 +360,21 @@ export class LessonRecordService {
         studentTypes: detail.studentTypes,
         sharedAt: detail.sharedAt ? detail.sharedAt.toISOString() : null,
         sharedBy: detail.sharedBy,
-        analyses: detail.analyses.map(this.mapAnalysis),
-        practices: detail.practices.map(this.mapPractice),
+        analyses: detail.analyses.map((analysis) => ({
+          id: analysis.id,
+          analysisGroupId: analysis.analysisGroupId,
+          analysisItemId: analysis.analysisItemId,
+          customAnalysis: analysis.customAnalysis,
+          displayOrder: analysis.displayOrder
+        })),
+        practices: detail.practices.map((practice) => ({
+          id: practice.id,
+          skillId: practice.skillId,
+          drillId: practice.drillId,
+          customDrill: practice.customDrill,
+          practiceNotes: practice.practiceNotes,
+          displayOrder: practice.displayOrder
+        })),
         coachRatings: detail.coachRatings.map((rating) => ({
           id: rating.id,
           lessonRecordDetailId: rating.lessonRecordDetailId,
@@ -366,21 +387,4 @@ export class LessonRecordService {
       }))
     };
   }
-
-  private mapAnalysis = (analysis: { id: string; analysisGroupId: number | null; analysisItemId: number | null; customAnalysis: string | null; displayOrder: number }): LessonDetailAnalysisResponse => ({
-    id: analysis.id,
-    analysisGroupId: analysis.analysisGroupId,
-    analysisItemId: analysis.analysisItemId,
-    customAnalysis: analysis.customAnalysis,
-    displayOrder: analysis.displayOrder
-  });
-
-  private mapPractice = (practice: { id: string; skillId: number | null; drillId: number | null; customDrill: string | null; practiceNotes: string | null; displayOrder: number }): LessonDetailPracticeResponse => ({
-    id: practice.id,
-    skillId: practice.skillId,
-    drillId: practice.drillId,
-    customDrill: practice.customDrill,
-    practiceNotes: practice.practiceNotes,
-    displayOrder: practice.displayOrder
-  });
 }
