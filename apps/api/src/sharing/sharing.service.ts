@@ -116,15 +116,9 @@ export class SharingService {
     // Filter by resort if specified
     if (options.resortId !== undefined) {
       where.resortId = options.resortId;
-    } else if (!instructor.canViewSharedRecords) {
+    } else if (!instructor.canViewSharedRecords && instructor.resortId) {
       // If can't view all shared records, limit to own resort
-      const lesson = await this.prisma.lesson.findFirst({
-        where: { instructorId: instructor.id },
-        select: { resortId: true }
-      });
-      if (lesson?.resortId !== undefined) {
-        where.resortId = lesson.resortId;
-      }
+      where.resortId = instructor.resortId;
     }
 
     // 4. Query shared records

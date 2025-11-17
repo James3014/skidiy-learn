@@ -89,13 +89,13 @@ export class InvitationsService {
   }
 
   /**
-   * 驗證邀請碼
+   * 驗證邀請碼狀態 - 純驗證邏輯，不做查詢
    */
-  async verifyCode(code: string): Promise<InvitationResponseDto> {
-    const invitation = await this.prisma.seatInvitation.findUnique({
-      where: { code }
-    });
-
+  private validateInvitationStatus(
+    invitation: SeatInvitation | null,
+    now: Date = new Date(),
+    options: { checkClaimed?: boolean } = { checkClaimed: true }
+  ): asserts invitation is SeatInvitation {
     if (!invitation) {
       throw new NotFoundException({
         code: 'INVITE_NOT_FOUND',
@@ -103,7 +103,6 @@ export class InvitationsService {
       });
     }
 
-    const now = new Date();
     if (invitation.expiresAt < now) {
       throw new GoneException({
         code: 'INVITE_EXPIRED',
@@ -111,13 +110,31 @@ export class InvitationsService {
       });
     }
 
-    if (invitation.claimedAt) {
+    if (options.checkClaimed && invitation.claimedAt) {
       throw new ConflictException({
         code: 'INVITE_ALREADY_CLAIMED',
         message: '邀請碼已被使用'
       });
     }
+  }
 
+  /**
+   * 驗證邀請碼 - 查詢 + 驗證
+   */
+  private async validateInvitationCode(code: string, now: Date = new Date()) {
+    const invitation = await this.prisma.seatInvitation.findUnique({
+      where: { code }
+    });
+
+    this.validateInvitationStatus(invitation, now);
+    return invitation;
+  }
+
+  /**
+   * 驗證邀請碼 (公開 API)
+   */
+  async verifyCode(code: string): Promise<InvitationResponseDto> {
+    const invitation = await this.validateInvitationCode(code);
     return toInvitationResponse(invitation);
   }
 
@@ -129,6 +146,8 @@ export class InvitationsService {
     mappingId: string;
     message: string;
   }> {
+    const now = new Date();
+
     // 1. 驗證邀請碼 (outside transaction for early validation)
     const invitation = await this.prisma.seatInvitation.findUnique({
       where: { code: dto.code },
@@ -141,27 +160,7 @@ export class InvitationsService {
       }
     });
 
-    if (!invitation) {
-      throw new NotFoundException({
-        code: 'INVITE_NOT_FOUND',
-        message: '邀請碼不存在'
-      });
-    }
-
-    const now = new Date();
-    if (invitation.expiresAt < now) {
-      throw new GoneException({
-        code: 'INVITE_EXPIRED',
-        message: '邀請碼已過期'
-      });
-    }
-
-    if (invitation.claimedAt) {
-      throw new ConflictException({
-        code: 'INVITE_ALREADY_CLAIMED',
-        message: '邀請碼已被使用'
-      });
-    }
+    this.validateInvitationStatus(invitation, now);
 
     // 2. 檢查身份表單是否完成
     const identityForm = invitation.seat.identityForm;
@@ -197,27 +196,7 @@ export class InvitationsService {
     // 5. Execute all database writes in a transaction
     const result = await this.prisma.$transaction(async (tx) => {
       // 5a. 建立或尋找 GlobalStudent
-      const contactFilters: Prisma.GlobalStudentWhereInput[] = [];
-      if (dto.contactEmail) {
-        contactFilters.push({ email: dto.contactEmail });
-      }
-      if (dto.contactPhone) {
-        contactFilters.push({ phone: dto.contactPhone });
-      }
-
-      let globalStudent: GlobalStudent | null = await tx.globalStudent.findFirst({
-        where: contactFilters.length ? { OR: contactFilters } : undefined
-      });
-
-      if (!globalStudent) {
-        globalStudent = await tx.globalStudent.create({
-          data: {
-            email: dto.contactEmail,
-            phone: dto.contactPhone,
-            birthDate: dto.birthDate ? new Date(dto.birthDate) : null
-          }
-        });
-      }
+      const globalStudent = await this.findOrCreateGlobalStudent(tx, dto);
 
       // 5b. 建立 StudentMapping
       const mapping: StudentMapping = await tx.studentMapping.create({
@@ -281,23 +260,7 @@ export class InvitationsService {
 
       // 5f. 如果有監護人，建立關係
       if (dto.guardianEmail && dto.isMinor) {
-        // Check if relation already exists within transaction
-        const existingRelation = await tx.guardianRelationship.findFirst({
-          where: {
-            guardianEmail: dto.guardianEmail,
-            studentId: globalStudent.id
-          }
-        });
-
-        if (!existingRelation) {
-          await tx.guardianRelationship.create({
-            data: {
-              guardianEmail: dto.guardianEmail,
-              studentId: globalStudent.id,
-              relationship: 'parent'
-            }
-          });
-        }
+        await this.ensureGuardianRelation(tx, dto.guardianEmail, globalStudent.id);
       }
 
       return {
@@ -310,6 +273,57 @@ export class InvitationsService {
       ...result,
       message: '席位認領成功'
     };
+  }
+
+  /**
+   * 查找或建立 GlobalStudent
+   */
+  private async findOrCreateGlobalStudent(
+    tx: Prisma.TransactionClient,
+    dto: { contactEmail?: string; contactPhone?: string; birthDate?: string }
+  ): Promise<GlobalStudent> {
+    const contactFilters: Prisma.GlobalStudentWhereInput[] = [];
+    if (dto.contactEmail) contactFilters.push({ email: dto.contactEmail });
+    if (dto.contactPhone) contactFilters.push({ phone: dto.contactPhone });
+
+    let globalStudent = await tx.globalStudent.findFirst({
+      where: contactFilters.length ? { OR: contactFilters } : undefined
+    });
+
+    if (!globalStudent) {
+      globalStudent = await tx.globalStudent.create({
+        data: {
+          email: dto.contactEmail,
+          phone: dto.contactPhone,
+          birthDate: dto.birthDate ? new Date(dto.birthDate) : null
+        }
+      });
+    }
+
+    return globalStudent;
+  }
+
+  /**
+   * 確保監護人關係存在
+   */
+  private async ensureGuardianRelation(
+    tx: Prisma.TransactionClient,
+    guardianEmail: string,
+    studentId: string
+  ): Promise<void> {
+    const existingRelation = await tx.guardianRelationship.findFirst({
+      where: { guardianEmail, studentId }
+    });
+
+    if (!existingRelation) {
+      await tx.guardianRelationship.create({
+        data: {
+          guardianEmail,
+          studentId,
+          relationship: 'parent'
+        }
+      });
+    }
   }
 
   /**
@@ -345,6 +359,8 @@ export class InvitationsService {
       note?: string;
     }
   ) {
+    const now = new Date();
+
     // 驗證邀請碼
     const invitation = await this.prisma.seatInvitation.findUnique({
       where: { code },
@@ -357,14 +373,8 @@ export class InvitationsService {
       }
     });
 
-    if (!invitation) {
-      throw new NotFoundException('邀請碼不存在');
-    }
-
-    const now = new Date();
-    if (invitation.expiresAt < now) {
-      throw new GoneException('邀請碼已過期');
-    }
+    // Don't check if claimed - allow form submission before claiming
+    this.validateInvitationStatus(invitation, now, { checkClaimed: false });
 
     const seatId = invitation.seatId;
     const existingForm = invitation.seat.identityForm;
