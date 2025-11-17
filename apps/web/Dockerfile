@@ -17,9 +17,6 @@ WORKDIR /app/apps/web
 # 構建
 RUN pnpm build
 
-# 移除 workspace 配置，防止 pnpm 在運行時嘗試解析 workspace
-RUN rm -f /app/pnpm-workspace.yaml
-
 # 環境變數
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -27,5 +24,5 @@ ENV HOSTNAME=0.0.0.0
 
 EXPOSE 8080
 
-# 直接用 next start
-CMD ["pnpm", "start"]
+# 直接用 npx next start，不要用 pnpm（避免 workspace 解析）
+CMD ["npx", "next", "start"]
