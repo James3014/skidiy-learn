@@ -107,14 +107,6 @@ export class LessonRecordService {
       shareVisibility: detail.shareVisibility
     }));
 
-    await this.audit.log({
-      actorId: accountId,
-      action: 'lesson_records_shared_query',
-      entityType: 'lesson_record_detail',
-      count: mapped.length,
-      scope: 'shared'
-    });
-
     return mapped;
   }
 

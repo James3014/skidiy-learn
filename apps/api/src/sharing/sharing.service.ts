@@ -88,7 +88,7 @@ export class SharingService {
 
   /**
    * 查詢共享的教學記錄
-   * 包含 Rate Limiting 和 Audit 記錄
+   * 包含 Rate Limiting
    */
   async querySharedRecords(
     accountId: string,
@@ -143,19 +143,7 @@ export class SharingService {
       take: options.limit ?? 20
     });
 
-    // 5. Audit the query
-    const metadata: Record<string, unknown> = { ...options };
-
-    await this.audit.log({
-      actorId: accountId,
-      action: 'shared_records_query',
-      entityType: 'lesson_record_detail',
-      scope: 'shared',
-      count: details.length,
-      metadata
-    });
-
-    // 6. Map to response format
+    // 5. Map to response format
     return details.map((detail) => ({
       detailId: detail.id,
       lessonRecordId: detail.lessonRecordId,
