@@ -28,4 +28,5 @@ ENV PORT=8080
 EXPOSE 8080
 
 # 啟動前執行數據庫遷移，然後啟動應用
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# 直接用 node 執行 prisma，完全避免 pnpm/npx
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]

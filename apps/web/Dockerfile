@@ -24,5 +24,5 @@ ENV HOSTNAME=0.0.0.0
 
 EXPOSE 8080
 
-# 直接用 npx next start，不要用 pnpm（避免 workspace 解析）
-CMD ["npx", "next", "start"]
+# 直接用 node 執行 Next.js，完全避免 pnpm/npx
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
