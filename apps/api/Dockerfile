@@ -1,24 +1,34 @@
-# 最簡單的版本 - 先讓它能跑
+# 基於能工作的 Dockerfile.dev 結構，只修改生產環境需要的部分
 FROM node:22-slim
 
-RUN npm install -g pnpm@9
-RUN apt-get update -y && apt-get install -y openssl
+# Install OpenSSL for Prisma（像 Dockerfile.dev 一樣）
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# 使用 corepack（像 Dockerfile.dev 一樣）
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-# Copy 所有東西
-COPY . .
+# 使用相同的工作目錄結構
+WORKDIR /workspace
 
-# 安裝依賴 (包含 devDependencies，因為需要 @nestjs/cli)
+# 複製 workspace 配置（像 Dockerfile.dev 一樣）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/api/prisma ./apps/api/prisma
+COPY packages/schema/package.json ./packages/schema/ 2>/dev/null || true
+
+# 安裝依賴
 RUN pnpm install --frozen-lockfile
 
-# 移到 api 目錄
-WORKDIR /app/apps/api
+# 複製源碼
+COPY . .
 
-# 生成 Prisma Client
-RUN pnpm prisma:generate
+# 切換到 api 目錄（像 Dockerfile.dev 一樣）
+WORKDIR /workspace/apps/api
 
-# 構建
+# Generate Prisma Client（像 Dockerfile.dev 一樣）
+RUN pnpm prisma generate
+
+# 構建（生產環境特有）
 RUN pnpm build
 
 # 環境變數
@@ -27,6 +37,5 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-# 啟動前執行數據庫遷移，然後啟動應用
-# 直接用 node 執行 prisma，完全避免 pnpm/npx
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
+# 運行 migration 然後啟動（使用 pnpm）
+CMD ["sh", "-c", "pnpm prisma migrate deploy && pnpm start"]
