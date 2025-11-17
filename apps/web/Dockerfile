@@ -14,14 +14,15 @@ COPY . .
 COPY --from=dependencies /src/node_modules ./node_modules
 COPY --from=dependencies /src/apps/web/node_modules ./apps/web/node_modules
 
-# 構建 Web
-WORKDIR /src
-RUN pnpm --filter apps/web build
+# 構建 Web - 直接在 apps/web 目錄中執行
+WORKDIR /src/apps/web
+RUN pnpm build
 
 FROM base AS runtime
 WORKDIR /app
 
-# 複製 standalone 輸出（包含 monorepo 結構）
+# 複製 standalone 輸出
+# standalone 模式會生成包含所有依賴的自包含目錄
 COPY --from=build /src/apps/web/.next/standalone ./
 # 複製靜態文件
 COPY --from=build /src/apps/web/.next/static ./apps/web/.next/static
@@ -34,5 +35,5 @@ ENV HOSTNAME=0.0.0.0
 
 EXPOSE 8080
 
-# standalone 模式生成的 server.js 在根目錄
+# Next.js standalone server 位置
 CMD ["node", "apps/web/server.js"]
