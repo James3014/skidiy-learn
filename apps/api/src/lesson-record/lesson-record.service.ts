@@ -10,8 +10,6 @@ import { RateLimiterService } from '../rate-limiter/rate-limiter.service.js';
 import {
   CoachRatingResponse,
   LatestRatingResponse,
-  LessonDetailAnalysisResponse,
-  LessonDetailPracticeResponse,
   LessonRecordResponse,
   PublicLessonRecordResponse
 } from './dto/lesson-record.response.js';
