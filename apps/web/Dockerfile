@@ -17,6 +17,9 @@ WORKDIR /app/apps/web
 # 構建
 RUN pnpm build
 
+# 移除 workspace 配置，防止 pnpm 在運行時嘗試解析 workspace
+RUN rm -f /app/pnpm-workspace.yaml
+
 # 環境變數
 ENV NODE_ENV=production
 ENV PORT=8080
