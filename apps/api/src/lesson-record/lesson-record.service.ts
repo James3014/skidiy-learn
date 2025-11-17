@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RateLimiterService } from '../rate-limiter/rate-limiter.service.js';
+import { RATE_LIMITS, isRateLimitEnabled } from '../config/rate-limits.js';
 import {
   CoachRatingResponse,
   LatestRatingResponse,
@@ -87,7 +88,15 @@ export class LessonRecordService {
       orderBy: { sharedAt: 'desc' }
     });
 
-    await this.rateLimiter.consume(`shared-query:${accountId}`, 30, 60_000);
+    // Apply rate limiting if enabled
+    const rateLimit = RATE_LIMITS.SHARED_QUERY;
+    if (isRateLimitEnabled(rateLimit)) {
+      await this.rateLimiter.consume(
+        `shared-query:${accountId}`,
+        rateLimit.max,
+        rateLimit.windowMs
+      );
+    }
 
     const mapped = details.map((detail) => ({
       id: detail.lessonRecord.id,

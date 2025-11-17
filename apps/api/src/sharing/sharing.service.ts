@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { RateLimiterService } from '../rate-limiter/rate-limiter.service.js';
+import { RATE_LIMITS, isRateLimitEnabled } from '../config/rate-limits.js';
 import type { Prisma, RecordShareVisibility, SportType, StudentPersona } from '@prisma/client';
 
 export interface QuerySharedRecordsOptions {
@@ -93,8 +94,15 @@ export class SharingService {
     accountId: string,
     options: QuerySharedRecordsOptions = {}
   ): Promise<SharedRecordResult[]> {
-    // 1. Rate limiting: 30 queries per minute
-    await this.rateLimiter.consume(`shared-query:${accountId}`, 30, 60_000);
+    // 1. Rate limiting
+    const rateLimit = RATE_LIMITS.SHARED_QUERY;
+    if (isRateLimitEnabled(rateLimit)) {
+      await this.rateLimiter.consume(
+        `shared-query:${accountId}`,
+        rateLimit.max,
+        rateLimit.windowMs
+      );
+    }
 
     // 2. Get instructor info for resort filtering
     const instructor = await this.prisma.instructor.findFirst({
