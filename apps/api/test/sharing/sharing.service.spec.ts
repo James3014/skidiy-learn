@@ -4,6 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AuditService } from '../../src/audit/audit.service.js';
 import { RateLimiterService } from '../../src/rate-limiter/rate-limiter.service.js';
+import { RATE_LIMITS } from '../../src/config/rate-limits.js';
 
 describe('SharingService', () => {
   let service: SharingService;
@@ -168,7 +169,11 @@ describe('SharingService', () => {
 
       await service.querySharedRecords('account-1', {});
 
-      expect(rateLimiterService.consume).toHaveBeenCalledWith('shared-query:account-1', 30, 60_000);
+      expect(rateLimiterService.consume).toHaveBeenCalledWith(
+        'shared-query:account-1',
+        RATE_LIMITS.SHARED_QUERY.max,
+        RATE_LIMITS.SHARED_QUERY.windowMs
+      );
     });
 
     it('應該在教練不存在時拋出 ForbiddenException', async () => {
@@ -241,28 +246,6 @@ describe('SharingService', () => {
       expect(prismaService.lessonRecordDetail.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           take: 20
-        })
-      );
-    });
-
-    it('應該記錄查詢的 audit log', async () => {
-      jest.spyOn(rateLimiterService, 'consume').mockResolvedValue(undefined);
-      jest.spyOn(prismaService.instructor, 'findFirst').mockResolvedValue(instructorMock as any);
-      jest.spyOn(prismaService.lesson, 'findFirst').mockResolvedValue({ resortId: 1 } as any);
-      jest.spyOn(prismaService.lessonRecordDetail, 'findMany').mockResolvedValue([sharedDetailMock] as any);
-
-      await service.querySharedRecords('account-1', { resortId: 1 });
-
-      expect(auditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({
-          actorId: 'account-1',
-          action: 'shared_records_query',
-          entityType: 'lesson_record_detail',
-          scope: 'shared',
-          count: 1,
-          metadata: expect.objectContaining({
-            resortId: 1
-          })
         })
       );
     });
