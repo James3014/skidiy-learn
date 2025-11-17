@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   '*.{js,cjs,mjs,ts,tsx}': [
     'pnpm exec eslint --max-warnings=0 --fix',
     'pnpm exec prettier --write'
