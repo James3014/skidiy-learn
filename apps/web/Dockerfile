@@ -5,55 +5,42 @@ RUN npm install -g pnpm@9
 
 WORKDIR /app
 
-# Copy workspace configuration
+# Copy workspace files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Copy all package.json files for workspace
 COPY apps/web/package.json ./apps/web/
 COPY apps/api/package.json ./apps/api/
 
-# Install dependencies
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy web source
 COPY apps/web ./apps/web
 
 # Build
 WORKDIR /app/apps/web
 RUN pnpm build
 
-# Production stage
+# Production stage - FLAT structure, no workspace
 FROM node:22-slim AS runner
 
-RUN npm install -g pnpm@9
-
 WORKDIR /app
-
-# Copy workspace config
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Copy package.json files
-COPY apps/web/package.json ./apps/web/
-
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
-
-# Copy built app from builder
-COPY --from=builder /app/apps/web ./apps/web
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs && \
-    chown -R nextjs:nodejs /app
-
-USER nextjs
 
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=8080
 
+# Create user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy ONLY what's needed for next start - NO workspace structure
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
+
+USER nextjs
+
 EXPOSE 8080
 
-WORKDIR /app/apps/web
-
-CMD ["pnpm", "start"]
+# Use node directly, not pnpm
+CMD ["node", "server.js"]
