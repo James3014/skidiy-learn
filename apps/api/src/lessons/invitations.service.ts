@@ -25,7 +25,23 @@ export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 產生 8 字元邀請碼，帶重試機制避免碰撞
+   * 為指定席位生成唯一的邀請碼
+   *
+   * 生成一個 8 字元的邀請碼，使用排除易混淆字元的字符集 (ABCDEFGHJKLMNPQRSTUVWXYZ23456789)。
+   * 如果發生碼衝突，會自動重試最多 5 次。
+   *
+   * @param seatId - 課程席位的唯一識別碼
+   * @param expiresInDays - 邀請碼有效天數，預設為 7 天
+   * @returns 包含邀請碼和相關資訊的響應物件
+   *
+   * @throws {NotFoundException} 當指定的席位不存在時
+   * @throws {ConflictException} 當重試多次後仍無法生成唯一碼時 (錯誤碼: INVITE_CODE_COLLISION)
+   *
+   * @example
+   * ```typescript
+   * const invitation = await service.generateInvitation('seat-123', 7);
+   * console.log(invitation.code); // 'A2B3C4D5'
+   * ```
    */
   async generateInvitation(
     seatId: string,
@@ -138,7 +154,29 @@ export class InvitationsService {
   }
 
   /**
-   * 驗證邀請碼 (公開 API)
+   * 驗證邀請碼的有效性
+   *
+   * 檢查邀請碼是否存在、是否過期、是否已被使用。
+   * 這個方法不會執行實際的席位認領，只驗證邀請碼的狀態。
+   *
+   * @param code - 8 字元的邀請碼
+   * @returns 包含邀請碼詳細資訊的響應物件
+   *
+   * @throws {NotFoundException} 當邀請碼不存在時 (錯誤碼: INVITE_NOT_FOUND)
+   * @throws {GoneException} 當邀請碼已過期時 (錯誤碼: INVITE_EXPIRED)
+   * @throws {ConflictException} 當邀請碼已被使用時 (錯誤碼: INVITE_ALREADY_CLAIMED)
+   *
+   * @example
+   * ```typescript
+   * try {
+   *   const invitation = await service.verifyCode('A2B3C4D5');
+   *   console.log(`席位 ${invitation.seatId} 的邀請碼有效`);
+   * } catch (error) {
+   *   if (error.code === 'INVITE_EXPIRED') {
+   *     console.log('邀請碼已過期');
+   *   }
+   * }
+   * ```
    */
   async verifyCode(code: string): Promise<InvitationResponseDto> {
     const invitation = await this.validateInvitationCode(code);
@@ -146,7 +184,59 @@ export class InvitationsService {
   }
 
   /**
-   * 認領席位（含樂觀鎖）
+   * 使用邀請碼認領課程席位
+   *
+   * 完整的席位認領流程，包括：
+   * 1. 驗證邀請碼（存在性、過期時間、使用狀態）
+   * 2. 檢查身份表單是否已完成
+   * 3. 檢查席位是否已被認領
+   * 4. 在 transaction 中執行：
+   *    - 創建或查找全域學生記錄
+   *    - 創建學生映射記錄
+   *    - 使用樂觀鎖更新席位狀態
+   *    - 標記邀請碼為已使用
+   *    - 確認身份表單
+   *    - 建立監護人關係（如果是未成年學生）
+   *
+   * 使用樂觀鎖（optimistic locking）確保並發安全，
+   * 當多個請求同時認領同一席位時，只有一個會成功。
+   *
+   * @param dto - 包含邀請碼和學生資訊的認領數據
+   * @returns 認領結果，包含席位 ID、學生映射 ID 和成功訊息
+   *
+   * @throws {NotFoundException} 當邀請碼不存在時 (錯誤碼: INVITE_NOT_FOUND)
+   * @throws {NotFoundException} 當課程不存在時
+   * @throws {GoneException} 當邀請碼已過期時 (錯誤碼: INVITE_EXPIRED)
+   * @throws {ConflictException} 當邀請碼已被使用時 (錯誤碼: INVITE_ALREADY_CLAIMED)
+   * @throws {ConflictException} 當席位已被其他人認領時 (錯誤碼: SEAT_CLAIMED)
+   * @throws {UnprocessableEntityException} 當身份表單未完成時 (錯誤碼: IDENTITY_FORM_INCOMPLETE)
+   *
+   * @example
+   * ```typescript
+   * const result = await service.claimSeat({
+   *   code: 'A2B3C4D5',
+   *   studentName: '張三',
+   *   contactEmail: 'zhang@example.com',
+   *   contactPhone: '0912345678',
+   *   birthDate: '2000-01-01',
+   *   isMinor: false
+   * });
+   *
+   * console.log(result.message); // '席位認領成功'
+   * console.log(result.seatId);  // 'seat-123'
+   * ```
+   *
+   * @example 未成年學生認領（需監護人資訊）
+   * ```typescript
+   * const result = await service.claimSeat({
+   *   code: 'A2B3C4D5',
+   *   studentName: '李小明',
+   *   contactEmail: 'li@example.com',
+   *   guardianEmail: 'parent@example.com',
+   *   birthDate: '2015-01-01',
+   *   isMinor: true
+   * });
+   * ```
    */
   async claimSeat(dto: ClaimInvitationDto): Promise<{
     seatId: string;
