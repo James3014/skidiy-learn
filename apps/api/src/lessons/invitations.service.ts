@@ -153,9 +153,22 @@ export class InvitationsService {
     mappingId: string;
     message: string;
   }> {
+    const validation = await this.validateClaimRequest(dto);
+    const result = await this.executeClaimTransaction(dto, validation);
+
+    return {
+      ...result,
+      message: '席位認領成功'
+    };
+  }
+
+  /**
+   * 驗證認領請求的所有前置條件
+   */
+  private async validateClaimRequest(dto: ClaimInvitationDto) {
     const now = new Date();
 
-    // 1. 驗證邀請碼 (outside transaction for early validation)
+    // 1. 驗證邀請碼
     const invitation = await this.prisma.seatInvitation.findUnique({
       where: { code: dto.code },
       include: {
@@ -193,8 +206,8 @@ export class InvitationsService {
       throw new ConflictException(error);
     }
 
-    // 4. Get lesson (outside transaction for validation)
-    const lesson: Lesson | null = await this.prisma.lesson.findUnique({
+    // 4. 獲取課程資訊
+    const lesson = await this.prisma.lesson.findUnique({
       where: { id: seat.lessonId }
     });
 
@@ -202,44 +215,34 @@ export class InvitationsService {
       throw new NotFoundException('課程不存在');
     }
 
-    // 5. Execute all database writes in a transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      // 5a. 建立或尋找 GlobalStudent
+    return { seat, lesson, now };
+  }
+
+  /**
+   * 在 transaction 中執行席位認領的所有資料庫操作
+   */
+  private async executeClaimTransaction(
+    dto: ClaimInvitationDto,
+    validation: { seat: any; lesson: Lesson; now: Date }
+  ) {
+    const { seat, lesson, now } = validation;
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. 建立或尋找 GlobalStudent
       const globalStudent = await this.findOrCreateGlobalStudent(tx, dto);
 
-      // 5b. 建立 StudentMapping
-      const mapping: StudentMapping = await tx.studentMapping.create({
+      // 2. 建立 StudentMapping
+      const mapping = await tx.studentMapping.create({
         data: {
           globalStudentId: globalStudent.id,
           resortId: lesson.resortId
         }
       });
 
-      // 5c. 使用樂觀鎖更新席位
-      try {
-        await tx.orderSeat.update({
-          where: {
-            id: seat.id,
-            version: seat.version // 樂觀鎖
-          },
-          data: {
-            status: 'claimed',
-            claimedMappingId: mapping.id,
-            claimedAt: now,
-            version: { increment: 1 },
-            updatedAt: now
-          }
-        });
-      } catch (error) {
-        // 樂觀鎖衝突 - transaction 會自動 rollback 所有操作
-        const conflictError: ErrorResponse = {
-          code: 'SEAT_CLAIMED',
-          message: '席位已被其他人認領，請重新整理頁面'
-        };
-        throw new ConflictException(conflictError);
-      }
+      // 3. 使用樂觀鎖更新席位
+      await this.claimSeatWithOptimisticLock(tx, seat, mapping.id, now);
 
-      // 5d. 更新邀請碼為已認領
+      // 4. 更新邀請碼為已認領
       await tx.seatInvitation.update({
         where: { code: dto.code },
         data: {
@@ -248,27 +251,10 @@ export class InvitationsService {
         }
       });
 
-      // 5e. 更新身份表單為確認狀態
-      await tx.seatIdentityForm.update({
-        where: { seatId: seat.id },
-        data: {
-          status: 'confirmed',
-          confirmedAt: now,
-          studentName: dto.studentName,
-          studentEnglish: dto.studentEnglish,
-          birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-          contactEmail: dto.contactEmail,
-          guardianEmail: dto.guardianEmail,
-          contactPhone: dto.contactPhone,
-          isMinor: dto.isMinor ?? false,
-          hasExternalInsurance: dto.hasExternalInsurance ?? false,
-          insuranceProvider: dto.insuranceProvider,
-          note: dto.note,
-          updatedAt: now
-        }
-      });
+      // 5. 更新身份表單為確認狀態
+      await this.confirmIdentityForm(tx, seat.id, dto, now);
 
-      // 5f. 如果有監護人，建立關係
+      // 6. 如果有監護人，建立關係
       if (dto.guardianEmail && dto.isMinor) {
         await this.ensureGuardianRelation(tx, dto.guardianEmail, globalStudent.id);
       }
@@ -278,11 +264,67 @@ export class InvitationsService {
         mappingId: mapping.id
       };
     });
+  }
 
-    return {
-      ...result,
-      message: '席位認領成功'
-    };
+  /**
+   * 使用樂觀鎖更新席位狀態
+   */
+  private async claimSeatWithOptimisticLock(
+    tx: TransactionClient,
+    seat: any,
+    mappingId: string,
+    now: Date
+  ) {
+    try {
+      await tx.orderSeat.update({
+        where: {
+          id: seat.id,
+          version: seat.version
+        },
+        data: {
+          status: 'claimed',
+          claimedMappingId: mappingId,
+          claimedAt: now,
+          version: { increment: 1 },
+          updatedAt: now
+        }
+      });
+    } catch (error) {
+      const conflictError: ErrorResponse = {
+        code: 'SEAT_CLAIMED',
+        message: '席位已被其他人認領，請重新整理頁面'
+      };
+      throw new ConflictException(conflictError);
+    }
+  }
+
+  /**
+   * 確認身份表單
+   */
+  private async confirmIdentityForm(
+    tx: TransactionClient,
+    seatId: string,
+    dto: ClaimInvitationDto,
+    now: Date
+  ) {
+    await tx.seatIdentityForm.update({
+      where: { seatId },
+      data: {
+        status: 'confirmed',
+        confirmedAt: now,
+        studentName: dto.studentName,
+        studentEnglish: dto.studentEnglish,
+        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+        contactEmail: dto.contactEmail,
+        guardianEmail: dto.guardianEmail,
+        contactPhone: dto.contactPhone,
+        isMinor: dto.isMinor ?? false,
+        hasExternalInsurance: dto.hasExternalInsurance ?? false,
+        insuranceProvider: dto.insuranceProvider,
+        note: dto.note,
+        updatedAt: now
+      }
+    });
   }
 
   /**
