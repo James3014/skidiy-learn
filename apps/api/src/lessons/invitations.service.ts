@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import * as crypto from 'crypto';
 import type { ErrorResponse } from '../types/errors.js';
+import type { TransactionClient } from '../types/domain.js';
 import { INVITATION } from '../config/constants.js';
 
 @Injectable()
@@ -288,7 +289,7 @@ export class InvitationsService {
    * 查找或建立 GlobalStudent
    */
   private async findOrCreateGlobalStudent(
-    tx: Prisma.TransactionClient,
+    tx: TransactionClient,
     dto: { contactEmail?: string; contactPhone?: string; birthDate?: string }
   ): Promise<GlobalStudent> {
     const contactFilters: Prisma.GlobalStudentWhereInput[] = [];
@@ -316,7 +317,7 @@ export class InvitationsService {
    * 確保監護人關係存在
    */
   private async ensureGuardianRelation(
-    tx: Prisma.TransactionClient,
+    tx: TransactionClient,
     guardianEmail: string,
     studentId: string
   ): Promise<void> {
