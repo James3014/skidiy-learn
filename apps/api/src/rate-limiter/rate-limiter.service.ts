@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import type { ErrorResponse } from '../types/errors.js';
 
 interface CounterEntry {
   count: number;
@@ -21,7 +22,11 @@ export class RateLimiterService {
     }
 
     if (entry.count >= limit) {
-      throw new HttpException('RATE_LIMITED', HttpStatus.TOO_MANY_REQUESTS);
+      const error: ErrorResponse = {
+        code: 'RATE_LIMITED',
+        message: '請求次數過多，請稍後再試'
+      };
+      throw new HttpException(error, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     entry.count += 1;

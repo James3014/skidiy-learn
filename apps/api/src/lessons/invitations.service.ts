@@ -16,6 +16,7 @@ import {
   StudentMapping
 } from '@prisma/client';
 import * as crypto from 'crypto';
+import type { ErrorResponse } from '../types/errors.js';
 
 @Injectable()
 export class InvitationsService {
@@ -79,10 +80,11 @@ export class InvitationsService {
     }
 
     if (!invitation) {
-      throw new ConflictException({
+      const error: ErrorResponse = {
         code: 'INVITE_CODE_COLLISION',
         message: '邀請碼產生多次碰撞，請稍後再試'
-      });
+      };
+      throw new ConflictException(error);
     }
 
     return toInvitationResponse(invitation);
@@ -97,24 +99,27 @@ export class InvitationsService {
     options: { checkClaimed?: boolean } = { checkClaimed: true }
   ): asserts invitation is SeatInvitation {
     if (!invitation) {
-      throw new NotFoundException({
+      const error: ErrorResponse = {
         code: 'INVITE_NOT_FOUND',
         message: '邀請碼不存在'
-      });
+      };
+      throw new NotFoundException(error);
     }
 
     if (invitation.expiresAt < now) {
-      throw new GoneException({
+      const error: ErrorResponse = {
         code: 'INVITE_EXPIRED',
         message: '邀請碼已過期'
-      });
+      };
+      throw new GoneException(error);
     }
 
     if (options.checkClaimed && invitation.claimedAt) {
-      throw new ConflictException({
+      const error: ErrorResponse = {
         code: 'INVITE_ALREADY_CLAIMED',
         message: '邀請碼已被使用'
-      });
+      };
+      throw new ConflictException(error);
     }
   }
 
@@ -165,23 +170,25 @@ export class InvitationsService {
     // 2. 檢查身份表單是否完成
     const identityForm = invitation.seat.identityForm;
     if (!identityForm || identityForm.status === 'draft') {
-      throw new UnprocessableEntityException({
+      const error: ErrorResponse = {
         code: 'IDENTITY_FORM_INCOMPLETE',
         message: '請先完成身份資料填寫'
-      });
+      };
+      throw new UnprocessableEntityException(error);
     }
 
     // 3. 檢查席位是否已被認領
     const seat = invitation.seat;
     if (seat.status === 'claimed') {
-      throw new ConflictException({
+      const error: ErrorResponse = {
         code: 'SEAT_CLAIMED',
         message: '席位已被認領',
         details: {
           claimedAt: seat.claimedAt,
           claimedBy: seat.claimedMappingId
         }
-      });
+      };
+      throw new ConflictException(error);
     }
 
     // 4. Get lesson (outside transaction for validation)
@@ -223,10 +230,11 @@ export class InvitationsService {
         });
       } catch (error) {
         // 樂觀鎖衝突 - transaction 會自動 rollback 所有操作
-        throw new ConflictException({
+        const conflictError: ErrorResponse = {
           code: 'SEAT_CLAIMED',
           message: '席位已被其他人認領，請重新整理頁面'
-        });
+        };
+        throw new ConflictException(conflictError);
       }
 
       // 5d. 更新邀請碼為已認領
